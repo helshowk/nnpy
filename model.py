@@ -212,8 +212,8 @@ class Model:
             numpy.random.shuffle(train_shuffle_idx)
             temp_data = list()
             temp_test = list()
-            print "\n"
-            print train_shuffle_idx[0]
+            #print "\n"
+            #print train_shuffle_idx[0]
             for t_idx in train_shuffle_idx:
                 temp_data.append(numpy.ravel(trainData['x'][t_idx]))
                 temp_test.append(numpy.ravel(trainData['t'][t_idx]))
@@ -234,34 +234,27 @@ class Model:
             for n in numpy.arange(0, train_idx, batchSize):
                 if screen_debug: 
                     utils.pbar('Training', n+1, train_idx)
-                print train_shuffle_idx[0]
-                #idx_range = train_shuffle_idx[n:(n+batchSize)]
-                #print type(trainData)
-                #print type(trainData['x'])
-                #print n
-                #temp = ca.array(trainData['x'][n:(n+batchSize)])
-                x = ca.array(use_trainData['x'][n:(n+batchSize)])
-                t = ca.array(use_trainData['t'][n:(n+batchSize)])
+                
+                
+                x = self.network.back.array(use_trainData['x'][n:(n+batchSize)])
+                #x = numpy.array(use_trainData['x'][n:(n+batchSize)])
+                t = self.network.back.array(use_trainData['t'][n:(n+batchSize)])
+                #t = numpy.array(use_trainData['t'][n:(n+batchSize)])
                 
                 if noise <> 0:
                     x += ca.random.normal(0, noise, x.shape)
                 
                 t0 = time.time()
-                if n == 0:
-                    print x[0]
-                    print t[0]
-                    raw_input(':')
                 
                 delta_w, delta_b, err, output = self.network.train(x, t, e)
                 total_train_time.append(time.time() - train_start)
+                
                 # confusion matrix
-                if (self.network.layers[-1].f == activation.softmax) :
+                if True:
                     if confusion is None:
                         # initialize
                         confusion = numpy.zeros((output.shape[1], output.shape[1]))
-
-                    
-                    
+ 
                     output_classes = numpy.argmax(output, axis=1)
                     target_classes = numpy.argmax(t, axis=1)
                     for cf_idx,row in enumerate(target_classes):
@@ -322,7 +315,8 @@ class Model:
                     
                 self.trainPerformance.append(time.time() - t0)
                 # note this is a performance error, not a network cost function
-                cost += ca.sum(self.network.cost(output,t))
+                #cost += ca.sum(self.network.cost(output,t))
+                cost += numpy.sum(self.network.cost(output,t))
                 #self.trainError.extend(cost)
             
             #average_train_error = numpy.average(self.trainError)
@@ -343,7 +337,7 @@ class Model:
                 avg_gain_W.append(numpy.average(l.G_W))
             screen_print('\tAverage gain: ' + str(avg_gain_W))
             screen_print('\tAverage weights: ' + str(avg_W))
-            if (self.network.layers[-1].f == activation.softmax) :
+            if (True):
                 screen_print("\tConfusion:\n")
                 printConfusionMatrix(confusion)
                 self.train_results.append(numpy.trace(confusion) / numpy.sum(confusion))

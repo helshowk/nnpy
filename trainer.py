@@ -1,41 +1,41 @@
 #!/usr/bin/env python2
 
-import sys, time
-import numpy as np
-import cudarray as ca
-
-import neural
-import activation
-import utils
-import os
-
 from collections import defaultdict
+import time
+import numpy as np
 
-class dataset:
-    def __init__(self, x, y=None):
-        self.x = x
-        self.y = y
-        self._x = x
-        self._y = y
-        self.idx = range(0, x.shape[0])
-        self.position = 0
-
-    def shuffle(self):
-        # add resampling?
-        np.random.shuffle(self.idx)
-
-    def getbatch(self, size):
-        # return batch of x, y
-        start_idx = self.position
-        end_idx = self.position + size
-        x = None
-        y = None
-        indices = self.idx[start_idx:end_idx]
-        x = np.vstack(self.x[indices])
-        y = np.vstack(self.y[indices])
-
-        return ca.array(x), ca.array(y)
+def printConfusionMatrix(confusion_matrix):
+    # output formatting for confusion matrix
+    headers = [ str(t) for t in range(1,confusion_matrix.shape[0]+1) ]
+    print "\t" + '\t'.join(headers)
     
+    total = 0
+    col_total = list()
+    false_negatives = list()
+    for i in range(0, confusion_matrix.shape[0]):
+        row_total = sum(confusion_matrix[i])
+        col_total.append(str(sum(confusion_matrix[:,i])))
+       
+        try: 
+            fn = 1 -(confusion_matrix[i][i]/np.sum(confusion_matrix[:,i]))
+            false_negatives.append(str(round(fn*100,2)) + "%")
+        except Exception,e:
+            print e
+            pass
+        
+        total += confusion_matrix[i][i]
+        if (row_total <> 0):
+            row_correct = confusion_matrix[i][i] / row_total
+        else:
+            row_correct = 0
+        values = [ str(int(v)) for v in confusion_matrix[i] ]
+        print str(i+1) + "\t" + ('\t').join(values) + "\t(" + str(row_total) + ")\t" + str(round(row_correct*100,2)) + "%"
+    
+    print "\n\t" + ('\t').join(col_total)
+    print "\n\t" + ('\t').join(false_negatives)
+    print '\nTotal Correct: ' + str(total) + " / " + str(np.sum(confusion_matrix)) + "  (" + str(round(total/np.sum(confusion_matrix) * 100, 2)) + "%)"
+    print '\n'
+
 
 class Trainer:
     # use parameters to define specific parameters for a trainer
@@ -45,28 +45,40 @@ class Trainer:
     def snapshot(self):
         pass
 
+
 class NNTrainer:
     def __init__(self, parameters):
-        if not parameters.has_key['epochs']:
+        print parameters
+        if not parameters.has_key('epochs'):
             parameters['epochs'] = 1
-        if not parameters.has_key['updateType']:
-            parameters['updateType'] = 'sgd'
-        if not parameters.has_key['batchSize']:
+        if not parameters.has_key('updateType'):
+            parameters['updateType'] = 'vanilla'
+        if not parameters.has_key('batchSize'):
             parameters['batchSize'] = -1
         
         self.parameters = parameters
+        self._postUpdate = self.postUpdate
         self.statistics = defaultdict(list)
 
     def train(self, network, data):
-        while e < self.parameters['epochs']:
+        data.transform()
+        e = 0
+        while (e < self.parameters['epochs']):
             data.shuffle()
-            values, targets = data.getbatch(self.parameters['batchSize'])
-            delta_w, delta_b, err, output = self.network.train(values, targets)
-            network.update(self.parameters['updateType'], delta_w, delta_b) 
-            self.postTrain(delta_w, delta_b, err, output)
+            for i in range(0, data.length, self.parameters['batchSize']):
+                values, targets = data.getbatch(self.parameters['batchSize'])
+                if values is not None:
+                    delta_w, delta_b, err, output = network.train(values, targets)
+                    network.update(self.parameters['updateType'], delta_w, delta_b) 
+                self._postUpdate(delta_w, delta_b, err, output, values, targets)
+            e += 1
+            data.reset()    # reset position
 
-    def postTrain(self, delta_w, delta_b, error, output):
+    def postUpdate(self, delta_w, delta_b, error, output, values, targets):
         pass
+    
+    def setPostUpdate(self, f):
+        self._postTrain = f
 
 
 if __name__ == "__main__":

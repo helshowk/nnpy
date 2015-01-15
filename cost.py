@@ -2,28 +2,29 @@
 
 import math
 import numpy
-import cudarray as ca
+import backend
 
-def quadratic(y,t):
-    #return 0.5*numpy.sum(numpy.power((t-y),2))
-    # I haven't tested that yet
-    return 0.5*ca.sum((t-y)**2)
+class cost:
+    def __init__(self,backend_type='numpy'):
+        self.backlib = backend_type
+        self.back = backend.backends(backend_type)
 
-def dquadratic(y,t):
-    return (y-t)
+    def quadratic(self,y,t):
+        return 0.5 * self.back.sum(self.back.power(t-y,2), axis=1)
+
+    def dquadratic(self,y,t):
+        return (y-t)
     
-def cross_entropy(y,t):
-    #y[numpy.where(y == 0)] = 1e-10
-    #return -1 * (numpy.sum(numpy.multiply(numpy.log(y), t)))
-    # haven't tested this either
-    return -1 * (ca.sum(ca.multiply(ca.log(y), t)))
+    def cross_entropy(self,y,t):
+        y = 1e-6*(y == 0) + y
+        return -1 * (self.back.sum(self.back.multiply(self.back.log(y), t), axis=1))
 	
-def dcross_entropy(y,t):
-	return y - t
+    def dcross_entropy(self,y,t):
+    	return y - t
 
-def cross_entropy_correct(y,t):
-    output = ca.zeros(y.shape)
-    max_y = ca.amax(y, axis=1, keepdims=True)
-    output[numpy.where(y == max_y)] = 1
-
-    return ca.array(numpy.all(t == output, axis=1))
+    #def cross_entropy_correct(self,y,t):
+    #    output = self.back.zeros(y.shape)
+    #    max_y = self.back.amax(y, axis=1, keepdims=True)
+    #    output[numpy.where(y == max_y)] = 1
+    #
+    #    return self.back.array(numpy.all(t == output, axis=1))
