@@ -61,7 +61,9 @@ class NNTrainer:
         self.statistics = defaultdict(list)
 
     def train(self, network, data):
-        data.transform()
+        if not data.transformed:
+            data.transform()
+        data.reset()
         e = 0
         while (e < self.parameters['epochs']):
             data.shuffle()
@@ -80,6 +82,21 @@ class NNTrainer:
     def setPostUpdate(self, f):
         self._postTrain = f
 
+    def confusion(self, network, data):
+        if not data.transformed:
+            data.transform()
+        x, y = data.getbatch(self.parameters['batchSize'])
+        confusion_matrix = np.zeros((y.shape[1], y.shape[1]))
+        idx = 0
+        while x is not None:
+            output = network.forward(x, train=False)
+            output_class = np.argmax(output, axis=1)
+            target_class = np.argmax(y, axis=1)
+            for o, t in zip(output_class, target_class):
+                confusion_matrix[o][t] += 1
+            idx += 1
+            x, y = data.getbatch(self.parameters['batchSize'])
+        return confusion_matrix
 
 if __name__ == "__main__":
     values = np.matrix(range(0,100)).T

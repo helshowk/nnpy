@@ -59,7 +59,8 @@ class CNLayer:
             for idx, input_map in enumerate(x):
                 weight_field = self.W[idx][j]
                 total += self.convolve(input_map, weight_field)
-            
+           
+            # apply non-linear transform 
             self.output.append(self.f(total + self.B[0][j]))
             self.d_output.append(self.df(total + self.B[0][j]))
         
@@ -70,7 +71,7 @@ class CNLayer:
         
 class Layer:
     # weight matrix is nxm and represents incoming connections from previous n nodes
-    def __init__(self, n, m, f, df, ones=False, dropout_p = 1, input_dropout_p = 1, backend_type='numpy'):
+    def __init__(self, n, m, f, df, dropout_p = 1, input_dropout_p = 1, backend_type='numpy'):
         # activation function and derivative
         self.f = f
         self.df = df
@@ -108,6 +109,10 @@ class Layer:
         self.activation = None
         self.active_prime = None    
 
+    def clone(self):
+        # return a clone without copying weight values
+        l = Layer(self.n, self.m, self.f, self.df, self.dropout_p, self.input_dropout_p, self.backlib)
+        return l
 
     def shape(self):
         return str(self.W.shape)

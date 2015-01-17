@@ -71,6 +71,20 @@ class NN:
         self.output = x
         return self.output
 
+    def clone(self):
+        # return a clone of the network without copying weights, i.e. just architecture
+        n = NN(self.cost, self.dcost, self.backlib)
+        n.learn_rate = self.learn_rate
+        n.momentum = self.momentum
+        n.adaptive_increase = self.adaptive_increase
+        n.adaptive_range = self.adaptive_range
+        n.l1_coefficient = self.l1_coefficient
+        n.l2_coefficient = self.l2_coefficient
+        n.ad_rho = self.ad_rho
+        for l in self.layers:
+            n.addLayer(l.clone())
+        return n 
+
     def train(self, x, t, update_count=0):
         # backprop input x with target t
         # return delta weight matrices per layer i.e. a list of delC / delW matrices and error
