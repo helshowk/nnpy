@@ -114,28 +114,32 @@ class NN:
         delta_cw = list()
         delta_cb = list()
         for l in reversed(self.layers):
-            layer_df = l.active_prime
-            temp = self.back.multiply(back_vec, layer_df)
+            dw, db, back_vec = l.backprop(back_vec)
+
+            #layer_df = l.active_prime
+            #temp = self.back.multiply(back_vec, layer_df)
             
             #if self.error_boost:
                 #temp = numpy.multiply(boost_vec, temp)                
                 
-            delta_cb.insert(0,self.back.mean(temp, axis=0))
-            answer = self.back.zeros((temp.shape[1], l.input_values.shape[1]))
-            self.back.dot(temp.T, l.input_values, out=answer)
-            answer = self.back.array(numpy.transpose(answer))
-            self.back.multiply(answer, (x.shape[0] ** -1), out=answer)
+            #delta_cb.insert(0,self.back.mean(temp, axis=0))
+            #answer = self.back.zeros((temp.shape[1], l.input_values.shape[1]))
+            #self.back.dot(temp.T, l.input_values, out=answer)
+            #answer = self.back.array(numpy.transpose(answer))
+            #self.back.multiply(answer, (x.shape[0] ** -1), out=answer)
             
             if self.l2_coefficient <> 0:
-                answer += self.l2_coefficient * 2 * l.W
+                #answer += self.l2_coefficient * 2 * l.W
+                dw += self.l2_coefficient * 2 * l.W
             
             if self.l1_coefficient <> 0:
                 adj_matrix = self.l1_coefficient * (l.W >0) - self.l1_coefficient * (l.W < 0) + 0. * (l.W == 0)
-                answer += adj_matrix
+                dw += adj_matrix
             
-            delta_cw.insert(0,answer)
-            back_vec = self.back.dot(l.W, temp.T)
-            back_vec = self.back.array(numpy.transpose(back_vec))
+            delta_cb.insert(0,db)
+            delta_cw.insert(0,dw)
+            #back_vec = self.back.dot(l.W, temp.T)
+            #back_vec = self.back.array(numpy.transpose(back_vec))
    
         return delta_cw, delta_cb, errors, y
     
