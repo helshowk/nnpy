@@ -32,7 +32,9 @@ class CNLayer:
         
     def reset(self):
         self.B = self.back.random.normal(0, 0.1, (1,self.output_maps))
-         
+        self.tW = 0.1 * self.back.random.uniform(size=(self.input_maps, self.output_maps, self.field_dim, self.field_dim))        
+
+ 
         # each input_map x output_map has a weight field associated with it
         for i in range(0, self.input_maps):
             self.W.append([])
@@ -152,10 +154,11 @@ class CNLayer:
  
         for j in range(0, self.output_maps):
             total = self.back.zeros((self.output_map_rows, self.output_map_cols))
+            #total2 = self.back.zeros((self.output_map_rows, self.output_map_cols))
             for idx, input_map in enumerate(x):
                 weight_field = self.W[idx][j]
                 total += self.convolve(input_map, weight_field)
-           
+                
             # apply non-linear transform 
             #print 'basis: '
             #print self.B[j]
