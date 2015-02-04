@@ -71,7 +71,8 @@ class NNTrainer:
                 values, targets = data.getbatch(self.parameters['batchSize'])
                 if values is not None:
                     delta_w, delta_b, err, output = network.train(values, targets)
-                    network.update(self.parameters['updateType'], delta_w, delta_b) 
+                    #print np.average(err)
+                    network.update(self.parameters['updateType'], delta_w, delta_b)
                 self._postUpdate(delta_w, delta_b, err, output, values, targets)
             e += 1
             data.reset()    # reset position
