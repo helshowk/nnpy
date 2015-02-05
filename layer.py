@@ -141,7 +141,7 @@ class Layer:
 class CNLayer(Layer):
     # convolutional layer
     
-    def __init__(self, input_maps, output_maps, input_rows, input_cols, field_dim, f, df, stride=0, backend_type='numpy', padding=(0,0), strides=(1,1), impl='custom', dropout_p=1, input_dropout_p=1):
+    def __init__(self, input_maps, output_maps, input_rows, input_cols, field_dim, f, df, stride=0, backend_type='numpy', padding=(0,0), strides=(1,1), impl='custom', dropout_p=1, input_dropout_p=1, init_b=None, init_w=None):
         self.W = list()         # first index is from input maps, second is to output maps, value is a weight matrix
         
         self.input_maps = input_maps
@@ -166,13 +166,17 @@ class CNLayer(Layer):
         self.dropout_p = dropout_p
         self.input_dropout_p = input_dropout_p
 
-        self.reset()
+        self.reset(init_b, init_w)
         
-    def reset(self):
-        self.B = self.back.random.normal(0, 0.1, (1,self.output_maps, 1, 1))
-        #self.B = self.back.zeros((self.output_maps, self.output_map_rows, self.output_map_cols))
-        self.W = self.back.random.normal(0, 0.1, size=(self.output_maps, self.input_maps, self.field_dim, self.field_dim))       
-        self.W *= ((self.output_maps * self.output_map_rows * self.output_map_cols) ** -0.5)
+    def reset(self, init_b=None, init_w=None):
+        if init_b == None:
+            init_b = self.back.random.normal(0, 0.1, (1,self.output_maps, 1, 1))
+        if init_w == None:
+            init_w = self.back.random.normal(0, 1, (self.output_maps, self.input_maps, self.field_dim, self.field_dim))
+            init_w *= ((self.output_maps * self.output_map_rows * self.output_map_cols) ** -0.5)
+
+        self.B = self.back.ones((1,self.output_maps,1,1)) * init_b
+        self.W = self.back.ones((self.output_maps, self.input_maps, self.field_dim, self.field_dim)) * init_w
  
         self.V_W = self.back.zeros(self.W.shape) 
         self.V_B = self.back.zeros(self.B.shape)

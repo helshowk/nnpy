@@ -73,15 +73,15 @@ class NNTrainer:
                     delta_w, delta_b, err, output = network.train(values, targets)
                     #print np.average(err)
                     network.update(self.parameters['updateType'], delta_w, delta_b)
-                self._postUpdate(delta_w, delta_b, err, output, values, targets)
+                self._postUpdate(i, delta_w, delta_b, err, output, values, targets, network)
             e += 1
             data.reset()    # reset position
 
-    def postUpdate(self, delta_w, delta_b, error, output, values, targets):
+    def postUpdate(self, idx, delta_w, delta_b, error, output, values, targets, network):
         pass
     
     def setPostUpdate(self, f):
-        self._postTrain = f
+        self._postUpdate = f
 
     def confusion(self, network, data):
         if not data.transformed:
