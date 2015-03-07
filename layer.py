@@ -21,14 +21,18 @@ class Layer:
 
         self.back = backend.backends(backend_type)
         self.backlib = backend_type
-        self.reset()
+        self.init()
 
         
     def __repr__(self):
         return "Activation: " + str(self.f) + "\nDropout: " + str(self.dropout_p) + "\nShape: (" + str(self.W.shape) + ")\nBias: " + str(self.B) + "\nWeights: \n" + str(self.W)
     
-    
+
     def reset(self):
+        self.V_W = self.back.zeros((self.n, self.m))
+        self.V_B = self.back.zeros((1,self.m))
+    
+    def init(self):
         # reset matrices
         self.W = self.back.array(numpy.random.normal(0,1,(self.n, self.m)))
         self.W *= (self.n ** -0.5)
@@ -64,6 +68,7 @@ class Layer:
             return sample > (1 - p)
    
     def backprop(self, deltas):
+        self.back_vec = deltas
         temp = self.back.multiply(deltas, self.active_prime)
         db = self.back.mean(temp, axis=0)
 
@@ -74,7 +79,7 @@ class Layer:
         
         back_delta = self.back.dot(self.W, temp.T)
         back_delta = self.back.array(numpy.transpose(back_delta))
-        
+        #print "\t\tbackprop(W,input_values,back_delta,dw,deltas) " + str(self.W.shape) + ", " + str(self.input_values.shape) + ", " + str(back_delta.shape) + ", " + str(dw.shape) + ", " + str(deltas.shape) + ";; " + str(numpy.mean(self.W)) + ", " + str(numpy.mean(self.input_values)) + ", " + str(numpy.mean(back_delta)) + ", " + str(numpy.mean(dw)) + ", " + str(numpy.mean(deltas))
         return dw, db, back_delta
 
  
@@ -92,24 +97,13 @@ class Layer:
             self.back.multiply(self.input_values, dropout_matrix, out=self.input_values)
         else:
             self.input_values *= self.input_dropout_p
-       
         # create memory space for logit on first pass
         if self.logit is None: 
             #try:
             self.logit = self.back.zeros((x.shape[0], self.W.shape[1]))
-            #except AttributeError:
-                # we're dealing with a convolution so modify x appropriately and reset input_values
-            #    x = numpy.matrix(numpy.hstack([ m.ravel() for m in x]))
-            #    self.input_values = self.back.array(x)
-            #    self.logit = self.back.zeros((x.shape[0], self.W.shape[1]))
 
         elif self.logit.shape <> (x.shape[0], self.W.shape[1]):
-            #try:
             self.logit = self.back.zeros((x.shape[0], self.W.shape[1]))
-            #except AttributeError:
-            #    x = numpy.matrix(numpy.hstack([ m.ravel() for m in x]))
-            #    self.input_values = self.back.array(x)
-            #    self.logit = self.back.zeros((x.shape[0], self.W.shape[1]))
         
         self.back.dot(self.input_values,self.W, out=self.logit)
         self.logit += self.B
@@ -141,7 +135,7 @@ class Layer:
 class CNLayer(Layer):
     # convolutional layer
     
-    def __init__(self, input_maps, output_maps, input_rows, input_cols, field_dim, f, df, stride=0, backend_type='numpy', padding=(0,0), strides=(1,1), impl='custom', dropout_p=1, input_dropout_p=1, init_b=None, init_w=None):
+    def __init__(self, input_maps, output_maps, input_rows, input_cols, field_dim, f, df, stride=0, backend_type='numpy', padding=(0,0), strides=(1,1), impl='custom', dropout_p=1, input_dropout_p=1, init_b=None, init_w=None, flatten_out=False):
         self.W = list()         # first index is from input maps, second is to output maps, value is a weight matrix
         
         self.input_maps = input_maps
@@ -166,18 +160,24 @@ class CNLayer(Layer):
         self.dropout_p = dropout_p
         self.input_dropout_p = input_dropout_p
 
-        self.reset(init_b, init_w)
+        self.flatten_out = flatten_out
+
+        self.init(init_b, init_w)
         
-    def reset(self, init_b=None, init_w=None):
-        if init_b == None:
+    def reset(self):
+        self.V_W = self.back.zeros(self.W.shape)
+        self.V_B = self.back.zeros(self.B.shape)
+
+    def init(self, init_b=None, init_w=None):
+        if init_b is None:
             init_b = self.back.random.normal(0, 0.1, (1,self.output_maps, 1, 1))
-        if init_w == None:
+        if init_w is None:
             init_w = self.back.random.normal(0, 1, (self.output_maps, self.input_maps, self.field_dim, self.field_dim))
-            init_w *= ((self.output_maps * self.output_map_rows * self.output_map_cols) ** -0.5)
+            init_w *= ((self.input_maps * self.output_map_rows * self.output_map_cols) ** -0.5)
 
         self.B = self.back.ones((1,self.output_maps,1,1)) * init_b
         self.W = self.back.ones((self.output_maps, self.input_maps, self.field_dim, self.field_dim)) * init_w
- 
+        print "Init layer: " + str(numpy.mean(self.W)) + ", " + str(numpy.std(self.W)) 
         self.V_W = self.back.zeros(self.W.shape) 
         self.V_B = self.back.zeros(self.B.shape)
         
@@ -207,16 +207,32 @@ class CNLayer(Layer):
         return result
 
     def backprop(self, deltas):
+        self.back_vec = deltas
+        if self.flatten_out:
+            d = deltas
+            d = self.back.array(numpy.transpose(d))
+            d = ca.reshape(d, self.out_shape)
+            deltas = d
+
         if self.impl == 'custom':
             return self._custom_backprop(deltas)
         elif self.impl == 'cudarray':
-            ret = self._ca_backprop(deltas)
-            bias_mult = self.back.multiply(self.active_prime, deltas)
-            bias_sum = self.back.sum(bias_mult, axis=(2,3))
-            bias = self.back.mean(bias_sum, axis=0)
+            #print self.activation
+            #print "\n"
+            #raw_input()
+            temp = self.back.multiply(deltas, self.active_prime)
+            ret = self._ca_backprop(temp)
+            #bias_mult = self.back.multiply(self.active_prime, deltas)
+            #print "bias mult shape: " + str(bias_mult.shape)
+            bias_sum = self.back.sum(temp, axis=(2,3), keepdims=True)
+            #print "bias sum shape: " + str(bias_sum.shape)
+            #bias_sum = self.back.sum(self.back.sum(bias_mult, axis=(2,3), keepdims=True), axis=0, keepdims=True)
+            bias = self.back.mean(bias_sum, axis=0, keepdims=True)
+            #bias = self.back.mean(bias_sum, axis=0)
             return ret[0], bias, ret[1]
 
     def _ca_backprop(self, deltas):
+        #print "CONVOLUTION _ca_backprop: " + str(self.input_values.shape) + ", " + str(self.W.shape) + ", " + str(deltas.shape)
         return self.cudarray_cn.bprop(self.input_values, self.W, deltas)
 
     def _custom_backprop(self, deltas):
@@ -283,10 +299,17 @@ class CNLayer(Layer):
     def fwd(self, x, train=False):
         if len(x.shape) == 2:
             x = self.back.array(numpy.reshape(numpy.array(x), (x.shape[0], self.input_maps, self.input_rows, self.input_cols)))
+
         if self.impl == 'custom':
-            return self._custom_fwd(x, train)
+            out = self._custom_fwd(x, train)
         elif self.impl == 'cudarray':
-            return self._ca_fwd(x, train)
+            out = self._ca_fwd(x, train)
+        
+        if self.flatten_out:
+            self.out_shape = out.shape
+            return self.back.array(ca.reshape(out, (out.shape[0], out.shape[1]*out.shape[2]*out.shape[3])))
+        else:
+            return out
 
     def _ca_fwd(self, x, train=False):
         self.input_values = x        
@@ -306,7 +329,7 @@ class CNLayer(Layer):
                 output *= dropout_p
         self.activation = self.f(output + self.B)
         self.active_prime = self.df(output + self.B)
-        return output
+        return self.activation
 
     def _custom_fwd(self, x, train=False):
         # x is a list of input maps
@@ -334,7 +357,7 @@ class CNLayer(Layer):
 class PoolLayer():
     def __init__(self, img_shape, method='max', win_shape=(2,2), padding=(0,0), strides=(2,2), impl='cudarray', backend_type='numpy', flatten_out=False):
         if impl == 'cudarray':
-            self.cudarray_pl = ca.nnet.PoolB01(win_shape, padding, strides)
+            self.cudarray_pl = ca.nnet.PoolB01(win_shape, padding, strides, method='max')
         self.implementation = impl
         self.img_shape = img_shape
         self.back = backend.backends(backend_type)
@@ -350,27 +373,40 @@ class PoolLayer():
 
     def fwd(self, x, train=False):
         # use train for dropout later?  
+        self.input_values = x
         if self.implementation == 'custom':
             out = self._custom_max_pool(x)
         elif self.implementation == 'cudarray':
             out = self.cudarray_pl.fprop(x)
         if self.flatten_out:
             self.out_shape = out.shape
-            return self.back.array(ca.reshape(out, (out.shape[0], out.shape[1]*out.shape[2]*out.shape[3])))
+            self.activation = self.back.array(ca.reshape(out, (out.shape[0], out.shape[1]*out.shape[2]*out.shape[3])))
         else:
-            return out
+            self.activation = out
+        
+        return self.activation
 
     def backprop(self, deltas):
+        self.back_vec = deltas
         if self.implementation == 'custom':
             # not yet implemented, need to copy from ConvLayer
             return None, None, None
         elif self.implementation == 'cudarray':
             d = deltas
             if self.flatten_out:
-                d = self.back.array(numpy.transpose(d))
                 d = ca.reshape(d, self.out_shape)
             ret = self.cudarray_pl.bprop(self.img_shape, d)
+            #print "\n"
+            #print ret.shape
+            #print ret
+            #print "\n"
+            #raw_input()
+            #print self.activation
+            #raw_input()
             return None, None, ret
+
+    def reset(self):
+        pass
  
     def _custom_max_pool(self, input_values):
         # note not thoroughly tested

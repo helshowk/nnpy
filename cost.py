@@ -10,14 +10,15 @@ class cost:
         self.back = backend.backends(backend_type)
 
     def quadratic(self,y,t):
-        return 0.5 * self.back.sum(self.back.power(t-y,2), axis=1)
+        return 0.5 * self.back.sum(self.back.power(t-y,2), axis=0)
 
     def dquadratic(self,y,t):
         return (y-t)
     
     def cross_entropy(self,y,t):
-        y = 1e-6*(y == 0) + y
-        return -1 * (self.back.sum(self.back.multiply(self.back.log(y), t), axis=1))
+        #y = 1e-9 * (y = 0) + y
+        eps = 1e-10
+        return -1 * (self.back.sum(self.back.multiply(self.back.log(y+eps), t), axis=1))
 	
     def dcross_entropy(self,y,t):
     	return y - t

@@ -63,6 +63,8 @@ class NNTrainer:
     def train(self, network, data):
         if not data.transformed:
             data.transform()
+            print np.mean(data.x)
+            print np.std(data.x)
         data.reset()
         e = 0
         while (e < self.parameters['epochs']):
@@ -71,7 +73,6 @@ class NNTrainer:
                 values, targets = data.getbatch(self.parameters['batchSize'])
                 if values is not None:
                     delta_w, delta_b, err, output = network.train(values, targets)
-                    #print np.average(err)
                     network.update(self.parameters['updateType'], delta_w, delta_b)
                 self._postUpdate(i, delta_w, delta_b, err, output, values, targets, network)
             e += 1

@@ -47,10 +47,13 @@ class activation:
     	# sum is the sum needed in denominator (i.e. sum(exp(z_j)) )
         #xmax = numpy.max(x, axis=1)
         if self.backlib == 'numpy':
-            xmax = self.back.max(x, axis=1, keepdims=True)
+            xmax = self.back.amax(x, axis=1, keepdims=True)
             s = self.back.sum(self.back.exp(x-xmax), axis=1, keepdims=True)
             return (self.back.exp(x-xmax) / s)
         elif self.backlib == 'cudarray':
+            #print "\nsoftmax"
+            #print "\tshape: " + str(x.shape)
+            #print "\tval: " + str(x)
             return self.back.nnet.softmax(x)
         #e = ca.exp(x)
         #return e/ca.sum(e, axis=1, keepdims=True)
@@ -74,8 +77,8 @@ class activation:
         if self.backlib == 'cudarray':
             return self.back.nnet.relu(x)
         elif self.backlib == 'numpy':
-            temp = numpy.copy(x)
-            temp[numpy.where(temp < 0)] = 0
+        #    temp = numpy.copy(x)
+        #    temp[numpy.where(temp < 0)] = 0
             return 0*(x<0)+x*(x>=0)
         #self.back.copyto(x, temp)
         #temp[numpy.where(temp < 0)] = 0
@@ -85,9 +88,9 @@ class activation:
         if self.backlib == 'cudarray':
             return self.back.nnet.relu_d(x)
         else:
-            temp = numpy.copy(x)
-            temp[numpy.where(temp < 0)] = 0
-            temp[numpy.where(temp > 0)] = 1
+        #    temp = numpy.copy(x)
+        #    temp[numpy.where(temp < 0)] = 0
+        #    temp[numpy.where(temp > 0)] = 1
             return 0*(x<0)+1*(x>=0)
         #temp = self.back.copy(x)
         #temp[numpy.where(temp < 0)] = 0

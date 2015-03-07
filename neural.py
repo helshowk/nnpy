@@ -69,6 +69,7 @@ class NN:
             x = l.fwd(x, train)
             count += 1
         self.output = x
+        #print "output: " + str(self.output)
         return self.output
 
     def clone(self):
@@ -95,7 +96,8 @@ class NN:
         if self.l2_coefficient <> 0:
             l2_total = 0
             for l in self.layers:
-                l2_total += self.back.sum(self.back.multiply(l.W,l.W))
+                if l.W is not None:
+                    l2_total += self.back.sum(self.back.multiply(l.W,l.W))
             errors = errors + self.l2_coefficient * l2_total
             
         if self.l1_coefficient <> 0:
@@ -103,42 +105,24 @@ class NN:
             # don't apply L1 to input->first layer connections?  Regularization only on hidden connections to encourage 
             # sparsity of activations and representation versus masking inputs
             for l in self.layers[1:]:
-                l1_total += self.back.sum(self.back.absolute(l.W))
+                if l.W is not None:
+                    l1_total += self.back.sum(self.back.absolute(l.W))
             errors = errors + self.l1_coefficient * l1_total
         
         delta_cw = list()
         delta_cb = list()
         for l in reversed(self.layers):
-            #print '\n=================================='
-            #print 'back_vec'
-            #print back_vec.shape
-            #print back_vec
-            #if l.W:
-            #    print '\nl.W'
-            #    print l.W.shape
-            #    print l.W
-
-            #if l.active_prime:
-            #    print '\nl.active_prime'
-            #    print l.active_prime
-        
-            #if l.input_values:
-            #    print '\nl.input_values'
-            #    print l.input_values
+            #print "back_vec shape: " + str(back_vec.shape)
             dw, db, back_vec = l.backprop(back_vec)
-            #print '\ndw'
-            #print dw
-            #print '====================================\n'
-            if self.l2_coefficient <> 0:
+            if self.l2_coefficient <> 0 and l.W is not None:
                 dw += self.l2_coefficient * 2 * l.W
             
-            if self.l1_coefficient <> 0:
+            if self.l1_coefficient <> 0 and l.W is not None:
                 adj_matrix = self.l1_coefficient * (l.W >0) - self.l1_coefficient * (l.W < 0) + 0. * (l.W == 0)
                 dw += adj_matrix
             
             delta_cb.insert(0,db)
             delta_cw.insert(0,dw)
-
         return delta_cw, delta_cb, errors, y
     
     def update(self, updateType, delta_cw, delta_cb):
@@ -159,14 +143,16 @@ class NN:
         # simplest update rule, just use momentum and learning rate
         for idx, l in enumerate(self.layers):
             # skip layers with no backprop (e.g Pooling)
-            if delta_cw[idx] is None: continue
+            if l.W is None: continue
             
             if delta_cb[idx].shape <> l.V_B.shape:
                 delta_cb[idx] = self.back.reshape(delta_cb[idx], l.V_B.shape)
             
             l.V_W = self.momentum * l.V_W - self.learn_rate * delta_cw[idx]
             l.V_B = self.momentum * l.V_B - self.learn_rate * delta_cb[idx]
+            #print "\tUPDATE " + str(l.W.shape) + ", " + str(numpy.mean(l.W)) + ", " + str(numpy.mean(l.V_W)) + ", " + str(numpy.mean(delta_cw[idx]))
             l.W += l.V_W
+            #print "\tUPDATE " + str(l.W.shape) + ", " + str(numpy.mean(l.W))
             l.B += l.V_B
     
     def _updateAdaptive(self, delta_cw, delta_cb):
@@ -283,6 +269,8 @@ class NN:
 
 
     def gradient_check(self, x, y, epsilon=1e-4):
+        print x.shape
+        print y.shape
         # run a gradient check on this network using a random weight
         layer = None
         while (layer is None):
@@ -297,29 +285,51 @@ class NN:
         output = self.forward(x)
         dw, db, _, _ = self.train(x, y)        
 
-        #print dw[layer_idx]
+        print "layer: " + str(layer_idx)
+        print "weight: " + str(weight_idx)
+        print "bias: " + str(bias_idx)
 
-        print dw[layer_idx][weight_idx]
+        print "dw:"
+        print "\t" + str(dw[layer_idx][weight_idx])
 
         old_W = layer.W[weight_idx]
         old_B = layer.B[bias_idx]
 
         layer.W[weight_idx] += epsilon
         temp = self.forward(x)
-        #print temp
         gc_plus = self.cost(temp, y)
-        print 'gc_plus: ' + str(gc_plus)
+        print '\tgc_plus: ' + str(gc_plus)
 
         layer.W[weight_idx] -= 2*epsilon
         temp = self.forward(x)
-        #print temp
         gc_minus = self.cost(temp, y)
-        print 'gc_minus: ' + str(gc_minus)
+        print '\tgc_minus: ' + str(gc_minus)
 
         estimate = (gc_plus - gc_minus) * ((2*epsilon)**-1)
-        print estimate
+        print "\t" + str(estimate)
 
+        print "\ndb:"
+        db[layer_idx] = numpy.reshape(db[layer_idx], (layer.B.shape))
+        print bias_idx
+        print db[layer_idx].shape
+        if len(bias_idx) > 2:
+            print "\t" + str(db[layer_idx][bias_idx[0], bias_idx[1], bias_idx[2], bias_idx[3]])
+        else:
+            print "\t" + str(db[layer_idx][0, bias_idx[1]])
 
+        layer.B[bias_idx] += epsilon
+        temp = self.forward(x)
+        gc_plus = self.cost(temp, y)
+        print '\tgc_plus: ' + str(gc_plus)
+
+        layer.B[bias_idx] -= 2*epsilon
+        temp = self.forward(x)
+        gc_minus = self.cost(temp, y)
+        print '\tgc_minus: ' + str(gc_minus)
+
+        estimate = (gc_plus - gc_minus) * ((2*epsilon)**-1)
+        print "\t" + str(estimate)
+        print "\n"
 
 
 

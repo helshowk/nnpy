@@ -27,6 +27,13 @@ class dataset:
             self.x[idx] = x_copy[i]
             self.y[idx] = y_copy[i]
 
+    def getsample(self, idx, reshape=True):
+        s = self.x[idx]
+        s = self.back.array(s)
+        if reshape:
+            s = self.back.reshape(s, ((1,) + s.shape))
+        return s
+
     def getbatch(self,size):
         if self.position >= self.length:
             return None, None
@@ -36,8 +43,9 @@ class dataset:
         return self.back.array(self.x[start_idx:end_idx]), self.back.array(self.y[start_idx:end_idx])
 
     def transform(self):
-        self.x = self.transformer(self.x)
-        self.transformed = True
+        if not self.transformed:
+            self.x = self.transformer(self.x)
+            self.transformed = True
     
     def reset(self):
         self.position = 0
