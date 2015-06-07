@@ -17,7 +17,7 @@ class cost:
     
     def cross_entropy(self,y,t):
         #y = 1e-9 * (y = 0) + y
-        eps = 1e-10
+        eps = 1e-6
         return -1 * (self.back.sum(self.back.multiply(self.back.log(y+eps), t), axis=1))
 	
     def dcross_entropy(self,y,t):

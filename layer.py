@@ -8,7 +8,7 @@ import backend
 
 class Layer:
     # weight matrix is nxm and represents incoming connections from previous n nodes
-    def __init__(self, n, m, f, df, dropout_p = 1, input_dropout_p = 1, backend_type='numpy'):
+    def __init__(self, n, m, f, df, dropout_p = 1, input_dropout_p = 1, backend_type='numpy',  init_b=None, init_w=None,):
         # activation function and derivative
         self.f = f
         self.df = df
@@ -21,7 +21,7 @@ class Layer:
 
         self.back = backend.backends(backend_type)
         self.backlib = backend_type
-        self.init()
+        self.init(init_b, init_w)
 
         
     def __repr__(self):
@@ -32,13 +32,23 @@ class Layer:
         self.V_W = self.back.zeros((self.n, self.m))
         self.V_B = self.back.zeros((1,self.m))
     
-    def init(self):
+    def init(self, init_b = None, init_w = None):
         # reset matrices
-        self.W = self.back.array(numpy.random.normal(0,1,(self.n, self.m)))
-        self.W *= (self.n ** -0.5)
+        # note init_b sets all bias vectors to this value whereas init_w is the variance of the initial weight distribution
+        if init_w == None:
+            init_w = 1
+        
+        if init_b == None:
+            init_b = 0.1
+        
+        #self.W = self.back.array(numpy.random.normal(0,init_w,(self.n, self.m)))
+        norm_init = numpy.sqrt(6./(self.n+self.m))
+        self.W = self.back.array(numpy.random.uniform(low=-1*norm_init, high=norm_init, size=(self.n, self.m)))
+        #self.W *= (self.n ** -0.5)
         self.V_W = self.back.zeros((self.n, self.m))
         
-        self.B = 0.1 *  self.back.ones((1, self.m))
+        self.B = init_b *  self.back.ones((1, self.m))
+        #self.B = self.back.zeros((1, self.m))
         self.V_B = self.back.zeros((1, self.m))
         
         # Adaptive learning rates
@@ -82,6 +92,10 @@ class Layer:
         #print "\t\tbackprop(W,input_values,back_delta,dw,deltas) " + str(self.W.shape) + ", " + str(self.input_values.shape) + ", " + str(back_delta.shape) + ", " + str(dw.shape) + ", " + str(deltas.shape) + ";; " + str(numpy.mean(self.W)) + ", " + str(numpy.mean(self.input_values)) + ", " + str(numpy.mean(back_delta)) + ", " + str(numpy.mean(dw)) + ", " + str(numpy.mean(deltas))
         return dw, db, back_delta
 
+    def is_degenerate(self):
+        # that's a mouthful
+        return numpy.isnan(numpy.sum(self.V_B)) or numpy.isnan(numpy.sum(self.B)) or numpy.isnan(numpy.sum(self.V_W)) or numpy.isnan(numpy.sum(self.W)) or numpy.isnan(numpy.sum(self.activation)) or numpy.isnan(numpy.sum(self.input_values)) or numpy.isnan(numpy.sum(self.active_prime)) or \
+                    numpy.isinf(numpy.sum(self.V_B)) or numpy.isinf(numpy.sum(self.B)) or numpy.isinf(numpy.sum(self.V_W)) or numpy.isinf(numpy.sum(self.W)) or numpy.isinf(numpy.sum(self.activation)) or numpy.isinf(numpy.sum(self.input_values)) or numpy.isinf(numpy.sum(self.active_prime))
  
     def fwd(self, x, train=False):
         # forward pass input x through this layer and return activations stored in self.activations

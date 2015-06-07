@@ -63,23 +63,28 @@ class NNTrainer:
     def train(self, network, data):
         if not data.transformed:
             data.transform()
-            print np.mean(data.x)
-            print np.std(data.x)
         data.reset()
         e = 0
         while (e < self.parameters['epochs']):
             data.shuffle()
             for i in range(0, data.length, self.parameters['batchSize']):
-                values, targets = data.getbatch(self.parameters['batchSize'])
-                if values is not None:
-                    delta_w, delta_b, err, output = network.train(values, targets)
+                input_values, targets = data.getbatch(self.parameters['batchSize'])
+                if input_values is not None:
+                    delta_w, delta_b, err, output = network.train(input_values, targets)
                     network.update(self.parameters['updateType'], delta_w, delta_b)
-                self._postUpdate(i, delta_w, delta_b, err, output, values, targets, network)
+                self._postUpdate(i, delta_w, delta_b, err, output, input_values, targets, network)
             e += 1
+            self._postEpoch(e, network)
             data.reset()    # reset position
 
-    def postUpdate(self, idx, delta_w, delta_b, error, output, values, targets, network):
+    def postUpdate(self, idx, delta_w, delta_b, error, output, input_values, targets, network):
         pass
+    
+    def _postEpoch(self,epoch, network):
+        pass
+    
+    def setPostEpoch(self, f):
+        self._postEpoch = f
     
     def setPostUpdate(self, f):
         self._postUpdate = f

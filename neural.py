@@ -4,6 +4,7 @@
 import time
 import logging, os, sys
 dir = os.path.dirname(__file__)
+import cPickle as pickle
 
 import numpy
 #import cudarray as ca
@@ -18,7 +19,6 @@ logging.basicConfig(filename=os.path.join(dir,'net.log'), level=logging.DEBUG,
 class NN:
     def __init__(self, cost_fn, dcost_fn, backend_type='numpy'):
         self.correct_output = None
-        self.error_boost = lambda x: x
         self.layers = list()
         self.cost = cost_fn
         self.dcost = dcost_fn
@@ -26,21 +26,26 @@ class NN:
         self.momentum = 0.5
         self.prev_cw = None
         self.prev_cb = None
-        self.adaptive_increase = 0.05
-        self.adaptive_range = [0.01, 100]
+        self.adaptive_increase = 0.025
+        self.adaptive_range = [0.01, 50]
         self.current_step = 0
         self.total_cb = None
         self.total_cw = None
+        self.xw_t = None
+        self.xb_t = None
         self.rms_memory = 0.9
         self.l1_coefficient = 0
         self.l2_coefficient = 0
         self.ad_rho = 0.9
         self.back = backend.backends(backend_type)
         self.backlib = backend_type
+        self.gradient_clip = -1
     
     def resetRMS(self):
         self.total_cb = None
         self.total_cw = None
+        self.xw_t = None
+        self.xb_t = None
     
     def __repr__(self):
         ret = list()
@@ -92,6 +97,11 @@ class NN:
         y = self.forward(x, train=True)
         errors = self.cost(y, t)
         back_vec = self.dcost(y, t)
+        
+        #if numpy.average(errors) > 10:
+            #print "errors > 10"
+            #raw_input()
+        
         # note these quantities are only returned, for performance purposes they can be removed
         if self.l2_coefficient <> 0:
             l2_total = 0
@@ -112,7 +122,6 @@ class NN:
         delta_cw = list()
         delta_cb = list()
         for l in reversed(self.layers):
-            #print "back_vec shape: " + str(back_vec.shape)
             dw, db, back_vec = l.backprop(back_vec)
             if self.l2_coefficient <> 0 and l.W is not None:
                 dw += self.l2_coefficient * 2 * l.W
@@ -128,6 +137,11 @@ class NN:
     def update(self, updateType, delta_cw, delta_cb):
         if (delta_cw is None):
             return
+            
+        if self.gradient_clip <> -1:
+            delta_cw = [ self.back.clip(cw, -1*self.gradient_clip, self.gradient_clip) for cw in delta_cw ]
+            delta_cb = [ self.back.clip(cb, -1*self.gradient_clip, self.gradient_clip) for cb in delta_cb ]
+        
         if updateType == 'vanilla':
             self._update(delta_cw, delta_cb)
         elif updateType == 'adaptive':
@@ -171,12 +185,12 @@ class NN:
                 l.G_W = self.back.multiply(l.G_W,temp)
                 temp = ((direction>=0)*self.adaptive_increase + (direction < 0) * 0)
                 l.G_W += temp
-                l.G_W = l.G_W.clip(self.adaptive_range[0], self.adaptive_range[1])
+                l.G_W = self.back.clip(l.G_W, self.adaptive_range[0], self.adaptive_range[1])
             if self.prev_cb:
                 direction = self.back.multiply(self.prev_cb[idx], delta_cb[idx])
                 l.G_B = self.back.multiply(l.G_B,(direction<0) * (1-self.adaptive_increase) + (direction>=0)*1)
                 l.G_B += (direction>=0)*self.adaptive_increase
-                l.G_B = l.G_B.clip(self.adaptive_range[0], self.adaptive_range[1])
+                l.G_B = self.back.clip(l.G_B, self.adaptive_range[0], self.adaptive_range[1])
  
             l.V_W = self.momentum * l.V_W - self.back.multiply(self.learn_rate * l.G_W, delta_cw[idx])
             l.V_B = self.momentum * l.V_B - self.back.multiply(self.learn_rate * l.G_B, delta_cb[idx])
@@ -224,7 +238,7 @@ class NN:
         if self.total_cw is None:
             self.total_cw = list(delta_cw)
             self.xw_t = list(delta_cw)
-            for i in range(0,len(delta_cw)):         
+            for i in range(0,len(delta_cw)):
                 if delta_cw[i] is not None:
                     self.total_cw[i] = self.back.zeros(delta_cw[i].shape)
                     self.xw_t[i] = self.back.zeros(delta_cw[i].shape)
@@ -250,9 +264,11 @@ class NN:
             self.total_cb[idx] = self.total_cb[idx] * self.ad_rho + self.back.multiply(delta_cb[idx], delta_cb[idx]) * (1-self.ad_rho)            
 
             r_t = self.back.sqrt(self.total_cw[idx] + 1e-6)
-            rms_xw_t = self.back.sqrt(self.back.multiply(self.xw_t[idx], self.xw_t[idx]) + 1e-6) 
+            rms_xw_t = self.back.sqrt(self.back.multiply(self.xw_t[idx], self.xw_t[idx]) + 1e-6)          
          
             l.V_W =  self.back.multiply(-rms_xw_t * (r_t ** -1), delta_cw[idx])
+            
+            
             self.xw_t[idx] = self.xw_t[idx] * self.ad_rho + self.back.multiply(l.V_W, l.V_W) * (1-self.ad_rho)
             if l.V_W.shape <> l.W.shape:
                 l.V_W = self.back.reshape(l.V_W, l.W.shape)
@@ -260,13 +276,14 @@ class NN:
             
             r_t = self.back.sqrt(self.total_cb[idx] + 1e-6)
             rms_xb_t = self.back.sqrt(self.back.multiply(self.xb_t[idx], self.xb_t[idx]) + 1e-6)
+            #rms_xb_t = self.back.abs(self.xb_t[idx]) + 1e-6
+            
             l.V_B = self.back.multiply(-rms_xb_t * (r_t ** -1), delta_cb[idx])
             self.xb_t[idx] = self.xb_t[idx] * self.ad_rho + self.back.multiply(l.V_B, l.V_B) * (1-self.ad_rho)
             
             if l.V_B.shape <> l.B.shape:
                 l.V_B = self.back.reshape(l.V_B, l.B.shape)
             l.B += l.V_B
-
 
     def gradient_check(self, x, y, epsilon=1e-4):
         print x.shape
@@ -331,13 +348,67 @@ class NN:
         print "\t" + str(estimate)
         print "\n"
 
+    def diagnostic(self):
+        def stat_display(stat):
+            return "%1.3e\t%1.3e\t%1.3e\t%1.3e" % (numpy.average(stat), numpy.std(stat), numpy.min(stat), numpy.max(stat))
+        
+        print "\n"
+        print "-"*80
+        print "parameter stats are displayed as (avg, std, min, max)"
+        print "-"*80
+        for idx, l in enumerate(self.layers):
+            if l.is_degenerate():
+                print "%s\t\tDEGENERATE"
+            else:
+                print "Layer %s" % (idx)
+                print "W:\t%s" % (stat_display(l.W))
+                print "B:\t%s" % (stat_display(l.B))
+                print "V_W:\t%s" % (stat_display(l.V_W))
+                print "V_B:\t%s" % (stat_display(l.V_B))
+                print "G_W:\t%s" % (stat_display(l.G_W))
+                print "G_B:\t%s" % (stat_display(l.G_B))
+                print "act:\t%s" % (stat_display(l.activation))
+                print "d_act:\t%s" % (stat_display(l.active_prime))
+                print "-"*80
+                
+        print "\n"
 
-
-
-
-
-
-
+    def pickle(self, location):
+        # only pickling layers so if you want to re-train you might have to refactor this code, create a params dict or something like that
+        out_file = open(location, 'wb')
+        layer_params = [ (l.W, l.B, l.V_W, l.V_B, l.G_W, l.G_B) for l in self.layers ]
+        params = dict()
+        params['layers'] = layer_params
+        params['total_cw'] = self.total_cw
+        params['total_cb'] = self.total_cb
+        params['prev_cw'] = self.prev_cw
+        params['prev_cb'] = self.prev_cb
+        params['xw_t'] = self.xw_t
+        params['xb_t'] = self.xb_t
+        
+        pickle.dump(params, out_file)
+        out_file.close()
+    
+    def load(self, location):
+        in_file = open(location, 'rb')
+        params = pickle.load(in_file)
+        in_file.close()
+        
+        layer_params = params['layers']
+        self.total_cw = params['total_cw']
+        self.total_cb = params['total_cb']
+        self.prev_cw = params['prev_cw']
+        self.prev_cb = params['prev_cb']
+        self.xw_t = params['xw_t']
+        self.xb_t = params['xb_t']
+        
+        for idx, l in enumerate(self.layers):
+            l.W = layer_params[idx][0]
+            l.B = layer_params[idx][1]
+            l.V_W = layer_params[idx][2]
+            l.V_B = layer_params[idx][3]
+            l.G_W = layer_params[idx][4]
+            l.G_B = layer_params[idx][5]
 
 
 

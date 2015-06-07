@@ -43,7 +43,7 @@ class dataset:
         return self.back.array(self.x[start_idx:end_idx]), self.back.array(self.y[start_idx:end_idx])
 
     def transform(self):
-        if not self.transformed:
+        if not self.transformed and self.transformer is not None:
             self.x = self.transformer(self.x)
             self.transformed = True
     
